@@ -1,0 +1,8 @@
+out_message: "i don't get it"
+
+steps:
+  - id: hello
+    respond_to: null
+    text: 'hewwo'
+    file_id: AgACAgIAAxkBAAMFZ5QXvpkuUZFWSzLQpJ9YwdTROXMAAi_nMRvoYaFIva7gZEOYkNEBAAMCAAN5AAM2BA
+    keyboard: ['hewwo!', 'bye...']
