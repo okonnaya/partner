@@ -2,13 +2,13 @@
 
 require 'active_record'
 require 'dotenv'
+require 'faraday'
 require 'telegram/bot'
 require 'yaml'
 
 require_relative 'config'
 require_relative 'data'
 require_relative 'helpers'
-require_relative 'mail'
 require_relative 'models'
 
 # Main module
@@ -18,11 +18,13 @@ module Main
 	def self.run
 		Dotenv.load
 
+		token = ENV['BOT_TOKEN']
+
 		story = YAML.load_file('config/story.yml')
 
 		ActiveRecord::Base.establish_connection(Config::SQLITE_PARAMS)
 
-		Telegram::Bot::Client.run(ENV['BOT_TOKEN']) do |bot|
+		Telegram::Bot::Client.run(token) do |bot|
 			begin
 				send = lambda { |user_id, text, markup = nil, reply = nil, enable_md = false|
 					markup ||= Telegram::Bot::Types::ReplyKeyboardRemove.new(remove_keyboard: true)
@@ -31,17 +33,20 @@ module Main
 
 				execute_step = lambda { |user_id, step|
 					photo_id = step['file_id']
+					sticker_id = step['sticker_id']
 
 					markup = step['keyboard'] ? get_keyboard_markup(step['keyboard']) : nil
 
 					if photo_id
 						bot.api.send_photo(chat_id: user_id, photo: photo_id, reply_markup: markup, caption: step['text'])
+					elsif sticker_id
+						bot.api.send_sticker(chat_id: user_id, sticker: sticker_id)
 					else
 						send.call(user_id, step['text'], markup)
 					end
 				}
 
-				puts 'listening...'
+				log 'listening...'
 
 				bot.listen do |message|
 					user_id = message.from&.id
@@ -56,6 +61,11 @@ module Main
 						if is_admin
 							if !message.photo.nil?
 								send.call(user_id, "this pic's id: #{message.photo.last.file_id}")
+							elsif !message.sticker.nil?
+								send.call(user_id, "this sticker's id: #{message.sticker.file_id}")
+							elsif text == '/reset'
+								User.delete_all
+								send.call(user_id, 'progress reset')
 							else
 								send.call(user_id, 'hey girlboss')
 							end
@@ -66,16 +76,32 @@ module Main
 
 						###### Message handling
 
+						user = User.find_or_initialize_by(id: user_id)
+
 						responded = false
+
 						steps = story['steps']
-						step = steps[0]
+						step_id = user.current_step_id || steps[0]['id']
+						step_index, step = get_step_by_id(steps, step_id)
+
+						log "received: '#{text}'\ncurrent step: #{step_id}"
+
+						throw 'Nil step' if step.nil?
 
 						if step['respond_to'].nil? or step['respond_to'] == text
-							puts "executing step '#{step['id']}'..."
+							log "executing step '#{step_id}'..."
 							execute_step.call(user_id, step)
 
 							responded = true
 						end
+
+						case step['after']
+						when 'set_next_step'
+							next_step = steps[step_index + 1]
+							user.current_step_id = next_step['id']
+						end
+
+						user.save
 
 						send.call(user_id, story['out_message']) unless responded
 					rescue StandardError => e
@@ -85,7 +111,8 @@ module Main
 						when Config::VOICE_FORBIDDEN_ERROR
 							send.call(user_id, Config::VOICE_FORBIDDEN_MESSAGE)
 						else
-							puts 'ERROR: ', e
+							log 'ERROR: ', e
+							log e.backtrace
 						end
 					end
 				end

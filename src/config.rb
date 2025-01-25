@@ -7,7 +7,7 @@ class Config
 	const_set('IS_DOWN', false)
 
 	# const_set('ADMIN_USER_ID', 182195759)
-	const_set('ADMIN_USER_ID', 123)
+	const_set('ADMIN_USER_ID', 6200808057)
 
 	const_set('TARGET_USER_ID', 182195759)
 	# const_set('TARGET_USER_ID', 562717995)

@@ -141,6 +141,7 @@ PLATFORMS
 DEPENDENCIES
   activerecord
   dotenv (~> 3.1)
+  faraday (~> 2.9)
   solargraph
   sqlite3
   telegram-bot-ruby
