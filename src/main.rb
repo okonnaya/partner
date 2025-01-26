@@ -32,7 +32,7 @@ module Main
 				}
 
 				execute_step = lambda { |user_id, step|
-					photo_id = step['file_id']
+					photo_id = step['photo_id']
 					sticker_id = step['sticker_id']
 
 					markup = step['keyboard'] ? get_keyboard_markup(step['keyboard']) : nil
@@ -78,7 +78,7 @@ module Main
 
 						user = User.find_or_initialize_by(id: user_id)
 
-						responded = false
+						step_executed = false
 
 						steps = story['steps']
 						step_id = user.current_step_id || steps[0]['id']
@@ -92,18 +92,20 @@ module Main
 							log "executing step '#{step_id}'..."
 							execute_step.call(user_id, step)
 
-							responded = true
+							step_executed = true
 						end
 
-						case step['after']
-						when 'set_next_step'
-							next_step = steps[step_index + 1]
-							user.current_step_id = next_step['id']
+						if step_executed
+							case step['after']
+							when 'set_next_step'
+								next_step = steps[step_index + 1]
+								user.current_step_id = next_step['id']
+							end
+
+							user.save
 						end
 
-						user.save
-
-						send.call(user_id, story['out_message']) unless responded
+						send.call(user_id, story['out_message']) unless step_executed
 					rescue StandardError => e
 						description = e.respond_to?(:message) ? get_bot_api_error_description(e.message) : nil
 
