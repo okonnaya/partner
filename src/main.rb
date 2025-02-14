@@ -108,7 +108,7 @@ module Main
 								user.update(step: 3)
 							else
 								send.call(user_id, format(Config::TEXTS[:nothanks]))
-								user.update(step: 9)
+								user.update(step: 0)
 							end
 						when 3
 							if ['20:00', '21:00', '22:00'].include?(text)
@@ -169,6 +169,8 @@ module Main
 							random_sticker = Config::STICKERS.sample
 							send_sticker.call(user_id, random_sticker, get_keyboard_markup(['записать радости', 'посмотреть радости']))
 							user.update(step: 7)
+						when 9
+							user.update(step: 0)
 						end
 
 						user.save
