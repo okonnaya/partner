@@ -54,7 +54,7 @@ module Main
 						users_to_notify = User.where(time: now)
 				
 						users_to_notify.each do |user|
-						send.call(user.id, format(Config::TEXTS[:notification]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+							send.call(user.id, format(Config::TEXTS[:notification]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
 						end
 				
 						sleep 60
@@ -133,7 +133,7 @@ module Main
 								user.update(step: 6)
 							end
 						when 6
-							Note.create(user_id: user.id, content: text, created_at: Time.now)
+							Note.create(user_id: user.id, content: text, created_at: Time.now).save
 							send_photo.call(user_id, Config::PHOTOS[:chat], format(Config::TEXTS[:first_note_response]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
 							user.update(step: 7)
 						when 7
@@ -165,7 +165,7 @@ module Main
 								send.call(user_id, format(Config::TEXTS[:error]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
 							end 
 						when 8
-							Note.create(user_id: user.id, content: text, created_at: Time.now)
+							Note.create(user_id: user.id, content: text, created_at: Time.now).save
 							random_sticker = Config::STICKERS.sample
 							send_sticker.call(user_id, random_sticker, get_keyboard_markup(['записать радости', 'посмотреть радости']))
 							user.update(step: 7)
