@@ -29,12 +29,12 @@ module Main
 					markup ||= Telegram::Bot::Types::ReplyKeyboardRemove.new(remove_keyboard: true)
 					bot.api.send_message(chat_id: user_id, text:, parse_mode: enable_md ? 'MarkdownV2' : nil, reply_to_message_id: reply, reply_markup: markup, disable_web_page_preview: true)
 				}
-				send_photo = lambda { |user_id, photo_id, text = nil, markup = nil, enable_md = true| 
+				send_photo = lambda { |user_id, photo_id, text = nil, markup = nil, enable_md = true|
 					bot.api.send_photo(
 						chat_id: user_id, 
 						photo: photo_id, 
 						reply_markup: markup, 
-						caption: text && escape_markdown(text), 
+						caption: text,
 						parse_mode: enable_md ? 'MarkdownV2' : nil
 					)
 				}
@@ -94,10 +94,8 @@ module Main
 						when 0
 							user.username = message.from.username
 							user.full_name = parse_name(message.from.first_name, message.from.last_name)
-							send_photo.call(user_id, Config::PHOTOS[:intro], format(Config::TEXTS[:intro], message.from.username ), get_keyboard_markup(['окей, и что?']))
+							send_photo.call(user_id, Config::PHOTOS[:intro], format(Config::TEXTS[:intro], message.from.username), get_keyboard_markup(['окей, и что?']))
 							user.update(step: 1)
-
-
 						when 1
 							send_photo.call(user_id, Config::PHOTOS[:meme], format(Config::TEXTS[:intro2]))
 							send.call(user_id, format(Config::TEXTS[:intro4]), get_keyboard_markup(['да💘', 'сорри, в другой раз']) )
@@ -165,7 +163,7 @@ module Main
 							
 								user.update(step: 7)
 							else
-								send.call(user_id, format(Config::TEXTS[:error]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+								send.call(user_id, format(Config::TEXTS[:unknown]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
 							end 
 						when 8
 							Note.create(user_id: user.id, content: text, created_at: Time.now).save
