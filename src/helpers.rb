@@ -7,11 +7,23 @@ module Helpers
 	def log(*msg)
 		puts(*msg, "\n")
 	end
+
 	def escape_markdown(text)
 		escape_chars = '_*[]()~`>#+-=|{}.!'
 		regex = Regexp.union(escape_chars.chars)
 		text.gsub(regex) { |char| "\\#{char}" }
 	end
+
+	# def escape_markdown(text)
+	# 	escape_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+	# 	escape_chars.each do |char|
+	# 		text.gsub!(char, "\\#{char}")
+	# 	end
+		
+	# 	text
+
+	# 	p text
+	# end
 	  
 
 	def get_keyboard_markup(keys)

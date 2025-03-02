@@ -34,7 +34,7 @@ module Main
 						chat_id: user_id, 
 						photo: photo_id, 
 						reply_markup: markup, 
-						caption: text, 
+						caption: text && escape_markdown(text), 
 						parse_mode: enable_md ? 'MarkdownV2' : nil
 					)
 				}
@@ -128,7 +128,7 @@ module Main
 								send.call(user_id, format(Config::TEXTS[:intro_time2]))
 							end
 						when 5
-							if text =='записать радости'
+							if text == 'записать радости'
 								send.call(user_id, format(Config::TEXTS[:rules]))
 								user.update(step: 6)
 							end
@@ -140,14 +140,17 @@ module Main
 							if text == 'записать радости'
 								send.call(user_id, format(Config::TEXTS[:note]))
 								user.update(step: 8)
-							
+							elsif text == 'пройти тестик'
+								send.call(user_id, Config::TEXTS[:test], get_keyboard_markup(['оки']) )
+								user.update(test_answers: nil)
+								user.update(step: 10)
 							elsif text == 'посмотреть радости'
 								joys = Note.where("user_id = ? AND created_at >= ?", user_id, Date.today - 3)
 											.order(created_at: :desc)
 											.group_by { |note| note.created_at.to_date }
 							
 								if joys.empty?
-									send.call(user_id, format(Config::TEXTS[:no_notes]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+									send.call(user_id, format(Config::TEXTS[:no_notes]), get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик']))
 								else
 									send.call(user_id, format(Config::TEXTS[:review])) 
 							
@@ -157,7 +160,7 @@ module Main
 									send.call(user_id, message)
 									end
 							
-									send.call(user_id, format(Config::TEXTS[:review_end]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+									send.call(user_id, format(Config::TEXTS[:review_end]), get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик']))
 								end 
 							
 								user.update(step: 7)
@@ -167,10 +170,92 @@ module Main
 						when 8
 							Note.create(user_id: user.id, content: text, created_at: Time.now).save
 							random_sticker = Config::STICKERS.sample
-							send_sticker.call(user_id, random_sticker, get_keyboard_markup(['записать радости', 'посмотреть радости']))
+							send_sticker.call(user_id, random_sticker, get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик']))
 							user.update(step: 7)
 						when 9
 							user.update(step: 0)
+						when 10
+							if text == 'карина'
+							  user.update(step: 7)
+							else
+							  # Инициализируем user_answers, если они еще не существуют
+							  user_answers = user.test_answers || ''
+							  p "1. Текущие ответы пользователя: #{user_answers}"
+						  
+							  # Проверяем, что ответ является допустимым (1-4)
+							  if text.match?(/^[1-5]$/)
+								# Добавляем новый ответ пользователя
+								user_answers += text
+								p "2. Ответы пользователя после добавления нового ответа (#{text}): #{user_answers}"
+						  
+								# Сохраняем обновленные ответы
+								user.update(test_answers: user_answers)
+								p "3. Ответы пользователя сохранены в базе данных: #{user.test_answers}"
+						  
+								# Определяем текущий вопрос
+								question_index = user_answers.length
+								p "4. Индекс текущего вопроса: #{question_index}"
+						  
+								if question_index < Config::TEST.size
+								  # Получаем следующий вопрос
+								  question = Config::TEST[question_index]
+								  p "5. Следующий вопрос: #{question[:text]}"
+						  
+								  # Создаем клавиатуру с вариантами ответа
+								  markup = get_keyboard_markup(question[:options].keys)
+								  p "6. Клавиатура создана: #{markup}"
+						  
+								  # Отправляем вопрос пользователю
+								  send.call(user_id, escape_markdown(question[:text]), markup)
+								  p "7. Вопрос отправлен пользователю."
+								else
+								  # Вопросы закончились, показываем результат
+								  p "8. Вопросы закончились. Показываем результат."
+						  
+								  # Находим самый частый ответ
+								  # Находим самый частый ответ
+								  most_frequent_answer = user_answers.chars.tally.max_by { |_, count| count }[0]
+
+								  # Формируем ключ для TEST_ANSWERS
+								  answer_key = "answer_#{most_frequent_answer}".to_sym
+
+								  # Получаем текстовый результат для самого частого ответа
+								  result_text = Config::TEST_ANSWERS[answer_key]
+						  
+								  # Логируем результат
+								  p "9. Пользователь выбрал самый частый ответ: #{most_frequent_answer} (#{result_text})"
+						  
+								  # Отправляем результат пользователю
+								  send.call(user_id, result_text, get_keyboard_markup(['записать радости', 'посмотреть радости']))
+								  p "10. Результат отправлен пользователю: #{result_text}"
+						  
+								  # Переход к шагу 7
+								  user.update(step: 7)
+								  p "11. Шаг пользователя обновлён на 7."
+								end
+							  else
+								# Игнорируем недопустимый ответ, но не останавливаем тест
+								p "12. Игнорируем недопустимый ответ: #{text}. Ожидается число от 1 до 4."
+						  
+								# Если user_answers пуст, отправляем первый вопрос
+								if user_answers.empty?
+								  question_index = 0
+								  question = Config::TEST[question_index]
+								  p "13. Отправляем первый вопрос, так как тест еще не начался."
+						  
+								  # Создаем клавиатуру с вариантами ответа
+								  markup = get_keyboard_markup(question[:options].keys)
+								  p "14. Клавиатура создана: #{markup}"
+						  
+								  # Отправляем вопрос пользователю
+								  send.call(user_id, escape_markdown(question[:text]), markup)
+								  p "15. Вопрос отправлен пользователю."
+								end
+							  end
+							end
+						when 11
+							user.update(step: 7)
+
 						end
 
 						user.save
