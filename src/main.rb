@@ -54,10 +54,14 @@ module Main
 						users_to_notify = User.where(time: now)
 				
 						users_to_notify.each do |user|
-							send.call(user.id, format(Config::TEXTS[:notification]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+							begin
+								send.call(user.id, format(Config::TEXTS[:notification]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+							rescue StandardError => e
+								warn 'Follow-up err:', e.message
+							end
 						end
 				
-						sleep 60
+						sleep 50
 					end
 				end
 
