@@ -47,6 +47,11 @@ module Main
 						reply_markup: markup
 					)
 				}
+				get_user_markup = lambda { |user|
+					user.is_premium == 1 ?
+						get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик']) :
+						get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик', 'оформить подписку'])
+				}
 
 				Thread.new do
 					loop do
@@ -55,7 +60,7 @@ module Main
 				
 						users_to_notify.each do |user|
 							begin
-								send.call(user.id, format(Config::TEXTS[:notification]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+								send.call(user.id, format(Config::TEXTS[:notification]), get_user_markup.call(user))
 							rescue StandardError => e
 								warn 'Follow-up err:', e.message
 							end
@@ -65,8 +70,6 @@ module Main
 					end
 				end
 
-
-
 				log 'listening...'
 
 				bot.listen do |message|
@@ -75,7 +78,7 @@ module Main
 					begin
 						next if !message.is_a?(Telegram::Bot::Types::Message) or message.chat.type != 'private'
 
-						text = message.text
+						text = message.text || message.caption
 
 						is_admin = user_id == Config::ADMIN_USER_ID
 
@@ -83,14 +86,18 @@ module Main
 							case text 
 							when '/purge'
 								send.call(user_id, 'неееет не надо я же ничего не сделал')
-								next
 							end
-
+							
 							if !message.photo.nil?
-								send.call(user_id, "this pic's id: #{message.photo.last.file_id}")
+								if text =~ /^\d+$/
+									send_photo.call(text, message.photo.last.file_id, format(Config::TEXTS[:premium_letter]))
+								else
+									send.call(user_id, "this pic's id: #{message.photo.last.file_id}", nil, nil, nil)
+								end
 							end
-						end
 
+							# next
+						end
 
 						user = User.find_or_initialize_by(user_id:)
 						
@@ -142,6 +149,9 @@ module Main
 							if text == 'записать радости'
 								send.call(user_id, format(Config::TEXTS[:note]))
 								user.update(step: 8)
+							elsif text == 'оформить подписку'
+								send_photo.call(user_id, Config::PHOTOS[:premium], format(Config::TEXTS[:premium_intro], message.from.username), get_keyboard_markup(['все оки', 'отмена, не хочу подписку']))
+								user.update(step: 12)
 							elsif text == 'пройти тестик'
 								send.call(user_id, Config::TEXTS[:test], get_keyboard_markup(['оки']) )
 								user.update(test_answers: nil)
@@ -152,7 +162,7 @@ module Main
 											.group_by { |note| note.created_at.to_date }
 							
 								if joys.empty?
-									send.call(user_id, format(Config::TEXTS[:no_notes]), get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик']))
+									send.call(user_id, format(Config::TEXTS[:no_notes]), get_user_markup.call(user))
 								else
 									send.call(user_id, format(Config::TEXTS[:review])) 
 							
@@ -161,18 +171,18 @@ module Main
 												notes.map { |note| escape_markdown(note.content) }.join("\n— ")
 									send.call(user_id, message)
 									end
-							
-									send.call(user_id, format(Config::TEXTS[:review_end]), get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик']))
+
+									send.call(user_id, format(Config::TEXTS[:review_end]), get_user_markup.call(user))
 								end 
 							
 								user.update(step: 7)
 							else
-								send.call(user_id, format(Config::TEXTS[:unknown]), get_keyboard_markup(['записать радости', 'посмотреть радости']))
+								send.call(user_id, format(Config::TEXTS[:unknown]), get_user_markup.call(user))
 							end 
 						when 8
 							Note.create(user_id: user.id, content: text, created_at: Time.now).save
 							random_sticker = Config::STICKERS.sample
-							send_sticker.call(user_id, random_sticker, get_keyboard_markup(['записать радости', 'посмотреть радости', 'пройти тестик']))
+							send_sticker.call(user_id, random_sticker, get_user_markup.call(user))
 							user.update(step: 7)
 						when 9
 							user.update(step: 0)
@@ -180,58 +190,30 @@ module Main
 							if text == 'карина'
 							  user.update(step: 7)
 							else
-							  # Инициализируем user_answers, если они еще не существуют
 							  user_answers = user.test_answers || ''
 							  p "1. Текущие ответы пользователя: #{user_answers}"
-						  
-							  # Проверяем, что ответ является допустимым (1-4)
 							  if text.match?(/^[1-5]$/)
-								# Добавляем новый ответ пользователя
 								user_answers += text
 								p "2. Ответы пользователя после добавления нового ответа (#{text}): #{user_answers}"
-						  
-								# Сохраняем обновленные ответы
 								user.update(test_answers: user_answers)
 								p "3. Ответы пользователя сохранены в базе данных: #{user.test_answers}"
-						  
-								# Определяем текущий вопрос
 								question_index = user_answers.length
 								p "4. Индекс текущего вопроса: #{question_index}"
-						  
 								if question_index < Config::TEST.size
-								  # Получаем следующий вопрос
 								  question = Config::TEST[question_index]
 								  p "5. Следующий вопрос: #{question[:text]}"
-						  
-								  # Создаем клавиатуру с вариантами ответа
 								  markup = get_keyboard_markup(question[:options].keys)
 								  p "6. Клавиатура создана: #{markup}"
-						  
-								  # Отправляем вопрос пользователю
 								  send.call(user_id, escape_markdown(question[:text]), markup)
 								  p "7. Вопрос отправлен пользователю."
 								else
-								  # Вопросы закончились, показываем результат
 								  p "8. Вопросы закончились. Показываем результат."
-						  
-								  # Находим самый частый ответ
-								  # Находим самый частый ответ
 								  most_frequent_answer = user_answers.chars.tally.max_by { |_, count| count }[0]
-
-								  # Формируем ключ для TEST_ANSWERS
 								  answer_key = "answer_#{most_frequent_answer}".to_sym
-
-								  # Получаем текстовый результат для самого частого ответа
 								  result_text = Config::TEST_ANSWERS[answer_key]
-						  
-								  # Логируем результат
 								  p "9. Пользователь выбрал самый частый ответ: #{most_frequent_answer} (#{result_text})"
-						  
-								  # Отправляем результат пользователю
 								  send.call(user_id, result_text, get_keyboard_markup(['записать радости', 'посмотреть радости']))
 								  p "10. Результат отправлен пользователю: #{result_text}"
-						  
-								  # Переход к шагу 7
 								  user.update(step: 7)
 								  p "11. Шаг пользователя обновлён на 7."
 								end
@@ -257,7 +239,26 @@ module Main
 							end
 						when 11
 							user.update(step: 7)
+						when 12
+							if text == 'все оки'
+								begin
+									response = bot.api.getChatMember(chat_id: Config::CHANNEL_ID, user_id: user_id)
+									status = response.status
 
+									if %w[creator administrator member restricted].include?(status)
+										send.call(user_id, format(Config::TEXTS[:premium_ok]), get_user_markup.call(user))
+										user.update(step: 7)
+									else
+										send.call(user_id, format(Config::TEXTS[:premium_not_ok]), get_keyboard_markup(['все оки', 'отмена, не хочу подписку']))
+									end
+								rescue => e
+									puts "Ошибка при проверке подписки: #{e}"
+									send.call(user_id, format(Config::TEXTS[:error]), get_user_markup.call(user))
+								end
+							else
+								send.call(user_id, format(Config::TEXTS[:premium_no]), get_user_markup.call(user))
+								user.update(step: 7)
+							end
 						end
 
 						user.save
