@@ -57,6 +57,7 @@ module Main
 					loop do
 						now = Time.now.strftime('%H:%M')
 						users_to_notify = User.where(time: now)
+						weekday = Time.now.wday
 				
 						users_to_notify.each do |user|
 							begin
@@ -65,6 +66,31 @@ module Main
 								warn 'Follow-up err:', e.message
 							end
 						end
+						if weekday == 0 && now == '23:59'
+							week_dates = (0..6).map { |i| Date.today - i }.reverse
+							notes = Note.where(created_at: week_dates.first.beginning_of_day..week_dates.last.end_of_day, user_id: User.where(is_premium: 1).select(:user_id))
+							notes_by_user = notes.group_by(&:user_id)
+							User.where(is_premium: 1).find_each do |user|
+							  begin
+								send.call(Config::ADMIN_USER_ID, "UserID: #{user.user_id}")
+						  
+								week_dates.each do |date|
+								  user_notes = notes_by_user[user.id]&.select { |note| note.created_at.to_date == date } || []
+								  date_str = "**#{escape_markdown(date.strftime('%d.%m.%Y'))}**"
+								  notes_list = user_notes.map { |note| escape_markdown(note.content) }
+								  message = if notes_list.any?
+									"#{date_str}\n— " + notes_list.join("\n— ")
+								  else
+									"#{date_str}\n— Нет записей"
+								  end
+								  send.call(Config::ADMIN_USER_ID, message)
+								end
+						  
+							  rescue StandardError => e
+								warn 'Sunday premium report err:', e.message
+							  end
+							end
+						  end
 				
 						sleep 50
 					end
@@ -246,6 +272,7 @@ module Main
 									status = response.status
 
 									if %w[creator administrator member restricted].include?(status)
+										user.update(is_premium: 1)
 										send.call(user_id, format(Config::TEXTS[:premium_ok]), get_user_markup.call(user))
 										user.update(step: 7)
 									else
