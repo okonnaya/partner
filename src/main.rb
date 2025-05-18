@@ -38,6 +38,28 @@ module Main
 						parse_mode: enable_md ? 'MarkdownV2' : nil
 					)
 				}
+				send_media_group = lambda { |user_id, photos, captions = nil, enable_md = true|
+					media = photos.map.with_index do |photo_id, index|
+						media_item = {
+							type: 'photo',
+							media: photo_id
+						}
+						
+						# Add caption to the first photo only (Telegram only displays caption on the first item)
+						if index == 0 && captions.is_a?(String) && !captions.empty?
+							media_item[:caption] = captions
+							media_item[:parse_mode] = 'MarkdownV2' if enable_md
+						end
+						
+						media_item
+					end
+
+					# Send the media group
+					bot.api.send_media_group(
+						chat_id: user_id,
+						media: media
+					)
+				}
 				send_sticker = lambda { |user_id, sticker_id, markup = nil, reply = nil|
 					markup ||= Telegram::Bot::Types::ReplyKeyboardRemove.new(remove_keyboard: true)
 					bot.api.send_sticker(
@@ -109,9 +131,27 @@ module Main
 						is_admin = user_id == Config::ADMIN_USER_ID
 
 						if is_admin
-							case text 
-							when '/purge'
+							if text == '/purge'
 								send.call(user_id, 'неееет не надо я же ничего не сделал')
+
+								next
+
+							elsif text =~ /^\/send_group/
+								args = text.split(' ')
+
+								throw 'Not enough args' if args.length < 3
+
+								id = args[1]
+
+								throw 'Wrong id' unless id =~ /^\d+$/
+
+								photos = args[2..]
+
+								p id, photos
+
+								send_media_group.call(id, photos, format(Config::TEXTS[:premium_letter]))
+
+								next
 							end
 							
 							if !message.photo.nil?
@@ -120,9 +160,9 @@ module Main
 								else
 									send.call(user_id, "this pic's id: #{message.photo.last.file_id}", nil, nil, nil)
 								end
-							end
 
-							# next
+								next
+							end
 						end
 
 						user = User.find_or_initialize_by(user_id:)
